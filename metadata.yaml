@@ -1,0 +1,10 @@
+name: astrbot_plugin_github_notify
+display_name: GitHub 通知
+short_desc: 轮询 GitHub，把 Issue / Release / Push 推送到指定群或 QQ。
+desc: 通过 GitHub API 轮询监听多个仓库的 Issue、Release 和 Push；支持按仓库分配不同群聊/私聊目标，Release 可自动总结更新日志并发送安装包附件。
+version: v1.0.2
+author: AieXile
+repo: https://github.com/AieXile/astrbot_plugin_github_notify
+support_platforms:
+  - aiocqhttp
+astrbot_version: ">=4.10.4,<5"

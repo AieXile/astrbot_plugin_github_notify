@@ -1,0 +1,228 @@
+{
+  "github_token": {
+    "description": "GitHub Token",
+    "type": "string",
+    "default": "",
+    "secret": true,
+    "obvious_hint": true,
+    "hint": "建议必填：提高 API 速率限制，并支持私有仓库与私有 Release 附件。不会写入日志。"
+  },
+  "repositories": {
+    "description": "监听仓库",
+    "type": "template_list",
+    "templates": {
+      "repo": {
+        "name": "GitHub 仓库",
+        "display_item": "repo",
+        "items": {
+          "repo": {
+            "description": "仓库（owner/repo）",
+            "type": "string",
+            "default": "",
+            "hint": "也可以粘贴 https://github.com/owner/repo 形式的地址。"
+          },
+          "enabled": {
+            "description": "启用",
+            "type": "bool",
+            "default": true
+          },
+          "issue": {
+            "description": "监听 Issue",
+            "type": "bool",
+            "default": true
+          },
+          "release": {
+            "description": "监听 Release",
+            "type": "bool",
+            "default": true
+          },
+          "push": {
+            "description": "监听 Push",
+            "type": "bool",
+            "default": true
+          },
+          "branches": {
+            "description": "Push 监听分支",
+            "type": "list",
+            "default": [],
+            "hint": "留空表示监听最多前 100 个分支；支持 * 通配，如 main、release/*。Push 通过分支 head + compare 检测，不依赖 Events API。"
+          },
+          "group_ids": {
+            "description": "推送到群号",
+            "type": "list",
+            "default": [],
+            "hint": "该仓库专用的 QQ 群号。留空则使用全局群号。三项目标都留空时继承全局目标。"
+          },
+          "user_ids": {
+            "description": "推送到 QQ 号",
+            "type": "list",
+            "default": [],
+            "hint": "该仓库专用的 QQ 号（私聊）。"
+          },
+          "umo_targets": {
+            "description": "推送到会话（UMO）",
+            "type": "list",
+            "default": [],
+            "_special": "umo",
+            "hint": "高级目标：直接选择会话。适合非 QQ 平台或需要精确定位会话。"
+          },
+          "asset_patterns": {
+            "description": "Release 附件匹配",
+            "type": "list",
+            "default": [],
+            "hint": "留空继承全局。示例：*.apk、*.exe、*.zip。"
+          },
+          "summary_max_chars": {
+            "description": "该仓库摘要字数",
+            "type": "int",
+            "default": 0,
+            "slider": {"min": 0, "max": 1000, "step": 10},
+            "hint": "0 表示继承全局设置。"
+          }
+        }
+      }
+    }
+  },
+  "poll_interval": {
+    "description": "轮询间隔（秒）",
+    "type": "int",
+    "default": 300,
+    "slider": {"min": 60, "max": 3600, "step": 30},
+    "hint": "无公网时靠轮询获取事件，建议 120-600 秒。"
+  },
+  "platform_id": {
+    "description": "QQ 平台实例 ID",
+    "type": "string",
+    "default": "",
+    "hint": "填写 aiocqhttp 平台实例 ID；留空自动选择第一个 aiocqhttp 实例。使用 UMO 目标时可忽略。"
+  },
+  "group_ids": {
+    "description": "默认群号",
+    "type": "list",
+    "default": [],
+    "hint": "全局默认推送的 QQ 群号；仓库内配置了任意目标时以仓库配置为准。"
+  },
+  "user_ids": {
+    "description": "默认 QQ 号",
+    "type": "list",
+    "default": [],
+    "hint": "全局默认推送的 QQ 号（私聊）。"
+  },
+  "umo_targets": {
+    "description": "默认会话（UMO）",
+    "type": "list",
+    "default": [],
+    "_special": "umo",
+    "hint": "全局默认的 AstrBot 会话目标；与群号/QQ 号可同时使用。"
+  },
+  "issue_actions": {
+    "description": "Issue 通知动作",
+    "type": "list",
+    "default": ["opened"],
+    "options": ["opened", "closed", "reopened", "labeled"],
+    "hint": "默认只通知新 Issue；可多选。"
+  },
+  "issue_body_chars": {
+    "description": "Issue 正文摘要字数",
+    "type": "int",
+    "default": 200,
+    "slider": {"min": 0, "max": 1000, "step": 10},
+    "hint": "0 表示不展示 Issue 正文。"
+  },
+  "push_max_commits": {
+    "description": "Push 最多展示提交数",
+    "type": "int",
+    "default": 5,
+    "slider": {"min": 1, "max": 20, "step": 1}
+  },
+  "include_prerelease": {
+    "description": "通知预发布 Release",
+    "type": "bool",
+    "default": true
+  },
+  "notify_on_first_run": {
+    "description": "首次运行补发历史事件",
+    "type": "bool",
+    "default": false,
+    "hint": "关闭时首次运行只记录当前事件作为基线，避免刷屏。"
+  },
+  "summary_provider": {
+    "description": "Release 摘要使用的 LLM",
+    "type": "string",
+    "default": "",
+    "_special": "select_provider",
+    "hint": "留空使用 AstrBot 默认对话模型。"
+  },
+  "summary_max_chars": {
+    "description": "Release 摘要默认字数",
+    "type": "int",
+    "default": 100,
+    "slider": {"min": 30, "max": 1000, "step": 10}
+  },
+  "summary_instruction": {
+    "description": "Release 摘要提示词",
+    "type": "text",
+    "default": "请把下面的 GitHub Release 更新日志总结成中文要点，保留破坏性变更和升级注意事项，不要编造内容，总字数不超过 {max_chars} 字。",
+    "hint": "支持 {max_chars} 占位符；留空使用内置提示词。"
+  },
+  "summary_input_chars": {
+    "description": "Release 摘要输入上限",
+    "type": "int",
+    "default": 6000,
+    "slider": {"min": 1000, "max": 20000, "step": 500},
+    "hint": "发布说明太长时只截取前面部分交给 LLM。"
+  },
+  "send_assets": {
+    "description": "发送 Release 附件",
+    "type": "bool",
+    "default": true
+  },
+  "asset_patterns": {
+    "description": "默认附件匹配",
+    "type": "list",
+    "default": ["*.apk", "*.exe"],
+    "hint": "按顺序优先匹配；支持 * 通配。"
+  },
+  "asset_prefer_64bit": {
+    "description": "优先 64 位 / v8a",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后优先选择文件名包含 arm64-v8a、arm64、x86_64、x64、win64 等关键字的附件。"
+  },
+  "asset_prefer_keywords": {
+    "description": "64 位优先关键字",
+    "type": "list",
+    "default": ["arm64-v8a", "arm64", "aarch64", "x86_64", "x64", "win64", "amd64"]
+  },
+  "asset_avoid_keywords": {
+    "description": "32 位降权关键字",
+    "type": "list",
+    "default": ["armeabi-v7a", "armv7", "x86", "win32", "i386"]
+  },
+  "asset_max_count": {
+    "description": "每个 Release 最多发送附件数",
+    "type": "int",
+    "default": 1,
+    "slider": {"min": 0, "max": 10, "step": 1},
+    "hint": "0 表示发送全部匹配附件。"
+  },
+  "asset_max_mb": {
+    "description": "单个附件大小上限（MB）",
+    "type": "int",
+    "default": 50,
+    "slider": {"min": 1, "max": 500, "step": 1},
+    "hint": "超过上限不发文件，改为发送下载链接。QQ 平台建议不超过 50MB。"
+  },
+  "asset_fallback_all": {
+    "description": "没有匹配附件时发送全部",
+    "type": "bool",
+    "default": false,
+    "hint": "关闭时只发送 Release 链接。"
+  },
+  "timeout": {
+    "description": "请求超时（秒）",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 10, "max": 120, "step": 5}
+  }
+}
