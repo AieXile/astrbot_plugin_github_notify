@@ -11,6 +11,7 @@ from typing import Any
 from . import dispatcher, formatter
 from .assets import max_bytes, select_assets
 from .events import (
+    Asset,
     CommitInfo,
     IssueInfo,
     PushInfo,
@@ -33,7 +34,7 @@ from .state import (
     mark_seen,
     set_repo_state,
 )
-from .summarizer import summarize_release
+from .summarizer import fallback_summary, summarize_release
 from .targets import resolve_platform_id, targets_for_repo
 
 _SAFE_COMPONENT = re.compile(r"[^\w.\-]+", re.UNICODE)
@@ -425,15 +426,21 @@ class GitHubNotifyService:
                 )
                 commits = tuple(item.message for item in details)
 
-        summary = await summarize_release(
-            self.context,
-            release=release,
-            commits=commits,
-            provider_id=self.settings.summary_provider,
-            max_chars=max_chars,
-            input_chars=self.settings.summary_input_chars,
-            instruction=self.settings.summary_instruction,
-        )
+        if self.settings.release_use_summary:
+            summary = await summarize_release(
+                self.context,
+                release=release,
+                commits=commits,
+                provider_id=self.settings.summary_provider,
+                max_chars=max_chars,
+                input_chars=self.settings.summary_input_chars,
+                instruction=self.settings.summary_instruction,
+            )
+        else:
+            # 默认直接展示 Release 发布说明原文，保留完整更新日志
+            summary = fallback_summary(
+                release, commits, self.settings.release_body_chars
+            )
         text = formatter.format_release(release, summary)
         succeeded_targets = await self._send_text(targets, text, report)
         if not self.settings.send_assets or not succeeded_targets:
@@ -444,11 +451,20 @@ class GitHubNotifyService:
             patterns=repo.asset_patterns
             or self.settings.asset_settings.patterns,
         )
-        selected = select_assets(release.assets, asset_settings)
+        limit = max_bytes(asset_settings)
+        selected = select_assets(release.assets, asset_settings, limit)
         if not selected:
             return
 
-        limit = max_bytes(asset_settings)
+        if all(asset.size and asset.size > limit for asset in selected):
+            # 全部超过大小上限时给出下载链接，避免通知里完全没有附件信息
+            await self._send_text(
+                succeeded_targets,
+                formatter.format_asset_fallback(selected),
+                report,
+            )
+            return
+
         fallback = []
         work_dir = (
             self.download_root
@@ -457,31 +473,9 @@ class GitHubNotifyService:
         )
         try:
             for asset in selected:
-                if asset.size and asset.size > limit:
-                    fallback.append(asset)
-                    continue
-                try:
-                    path = await self.client.download_asset(
-                        asset, work_dir, limit
-                    )
-                except AssetTooLarge:
-                    fallback.append(asset)
-                    continue
-                except Exception:
-                    self.logger.exception(
-                        "GitHub Release 附件下载失败：%s", asset.name
-                    )
-                    fallback.append(asset)
-                    continue
-
-                sent = await dispatcher.send_file_to_targets(
-                    self.context,
-                    succeeded_targets,
-                    path,
-                    asset.name,
-                    self.logger,
+                sent = await self._send_asset(
+                    asset, succeeded_targets, work_dir, limit, report
                 )
-                report.sent += len(sent)
                 if not sent:
                     fallback.append(asset)
         finally:
@@ -493,3 +487,49 @@ class GitHubNotifyService:
                 formatter.format_asset_fallback(fallback),
                 report,
             )
+
+    async def _send_asset(
+        self,
+        asset: Asset,
+        targets: list[str],
+        work_dir: Path,
+        limit: int,
+        report: PollReport,
+    ) -> bool:
+        """发送 Release 附件；优先让协议端直接下载，失败时回退本地文件。"""
+        if asset.size and asset.size > limit:
+            return False
+
+        sent: list[str] = []
+        if asset.browser_url:
+            sent = await dispatcher.send_file_to_targets(
+                self.context,
+                targets,
+                None,
+                asset.name,
+                self.logger,
+                url=asset.browser_url,
+            )
+        remaining = [umo for umo in targets if umo not in sent]
+
+        if remaining:
+            try:
+                path = await self.client.download_asset(asset, work_dir, limit)
+            except AssetTooLarge:
+                path = None
+            except Exception:
+                self.logger.exception(
+                    "GitHub Release 附件下载失败：%s", asset.name
+                )
+                path = None
+            if path is not None:
+                sent += await dispatcher.send_file_to_targets(
+                    self.context,
+                    remaining,
+                    path,
+                    asset.name,
+                    self.logger,
+                )
+
+        report.sent += len(sent)
+        return len(sent) == len(targets)

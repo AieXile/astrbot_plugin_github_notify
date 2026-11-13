@@ -9,22 +9,37 @@ from typing import Any, Iterable
 from .events import ReleaseInfo
 from .settings import DEFAULT_INSTRUCTION
 
-_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]+\)")
-_MD_MARK = re.compile(r"[*_`>#]+")
+_HEADING = re.compile(r"^\s{0,3}#{1,6}\s*", re.MULTILINE)
+_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_MD_LINK = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
+_RULE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$", re.MULTILINE)
+_BOLD = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_ITALIC = re.compile(r"(?<!\*)\*(?!\s)([^*\n]+?)\*(?!\*)")
+_CODE = re.compile(r"`([^`\n]*)`")
 _BLANK_LINES = re.compile(r"\n{3,}")
 
 
 def _plain_markdown(text: str) -> str:
-    text = _MD_LINK.sub(r"\1", text or "")
-    text = _MD_MARK.sub("", text)
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    """把发布说明 Markdown 转成适合聊天阅读的纯文本。
+
+    保留标题、列表和换行结构，只去掉标记本身，避免原文被压成一行。
+    """
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = _IMAGE.sub("", text)
+    text = _MD_LINK.sub(lambda m: m.group(1) or m.group(2), text)
+    text = _RULE.sub("", text)
+    text = _HEADING.sub("", text)
+    text = _BOLD.sub(lambda m: m.group(1) or m.group(2), text)
+    text = _ITALIC.sub(r"\1", text)
+    text = _CODE.sub(r"\1", text)
+    text = "\n".join(line.rstrip() for line in text.splitlines())
     return _BLANK_LINES.sub("\n\n", text).strip()
 
 
 def _clip(text: str, limit: int) -> str:
     text = text.strip()
     if limit <= 0:
-        return ""
+        return text
     if len(text) > limit:
         return text[:limit].rstrip() + "…"
     return text

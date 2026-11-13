@@ -146,6 +146,19 @@
     "default": false,
     "hint": "关闭时首次运行只记录当前事件作为基线，避免刷屏。"
   },
+  "release_use_summary": {
+    "description": "用 LLM 总结 Release 更新日志",
+    "type": "bool",
+    "default": false,
+    "hint": "关闭时直接发送 Release 发布说明原文（内容更完整）；开启后使用下方 LLM 配置生成短摘要。"
+  },
+  "release_body_chars": {
+    "description": "发布说明展示字数上限",
+    "type": "int",
+    "default": 3000,
+    "slider": {"min": 0, "max": 5000, "step": 100},
+    "hint": "仅在关闭 LLM 摘要时生效；0 表示不限制。"
+  },
   "summary_provider": {
     "description": "Release 摘要使用的 LLM",
     "type": "string",
@@ -192,12 +205,12 @@
   "asset_prefer_keywords": {
     "description": "64 位优先关键字",
     "type": "list",
-    "default": ["arm64-v8a", "arm64", "aarch64", "x86_64", "x64", "win64", "amd64"]
+    "default": ["arm64-v8a", "arm64", "aarch64", "x86_64", "x64", "win64", "amd64", "v8a"]
   },
   "asset_avoid_keywords": {
     "description": "32 位降权关键字",
     "type": "list",
-    "default": ["armeabi-v7a", "armv7", "x86", "win32", "i386"]
+    "default": ["armeabi-v7a", "armv7", "v7a", "x86", "win32", "i386"]
   },
   "asset_max_count": {
     "description": "每个 Release 最多发送附件数",

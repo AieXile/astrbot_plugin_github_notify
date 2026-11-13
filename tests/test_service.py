@@ -321,7 +321,7 @@ class TestService(unittest.IsolatedAsyncioTestCase):
         await service.poll_all()
         self.assertEqual(len(context.sent), 1)
 
-    async def test_release_summary_and_asset(self) -> None:
+    async def test_release_notes_and_asset(self) -> None:
         client = FakeClient(
             [EventsPage(events=()), EventsPage(events=(_release(),))]
         )
@@ -337,7 +337,8 @@ class TestService(unittest.IsolatedAsyncioTestCase):
             and chain.chain[0][0] == "text"
         ]
         self.assertTrue(any("[Release]" in text for text in texts))
-        self.assertTrue(any("修复闪退并优化播放" in text for text in texts))
+        # 默认直接展示发布说明原文，而不是 LLM 摘要
+        self.assertTrue(any("- fix crash" in text for text in texts))
 
         files = [
             chain.chain[0]
@@ -346,9 +347,22 @@ class TestService(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertEqual(len(files), 1)
         self.assertEqual(files[0].name, "app-arm64-v8a.apk")
-        self.assertEqual(client.downloaded, ["app-arm64-v8a.apk"])
-        self.assertFalse(client.download_paths[0].exists())
+        # 优先让协议端直接下载附件 URL，不走本地下载
+        self.assertEqual(files[0].file, "https://github.com/a/1")
+        self.assertEqual(client.downloaded, [])
         self.assertEqual(report.sent, 2)
+
+    async def test_release_llm_summary_when_enabled(self) -> None:
+        client = FakeClient(
+            [EventsPage(events=()), EventsPage(events=(_release(),))]
+        )
+        service, context, _ = await self._service(
+            _settings(release_use_summary=True), client, {}
+        )
+        await service.poll_all()
+        await service.poll_all()
+        texts = _texts(context)
+        self.assertTrue(any("修复闪退并优化播放" in text for text in texts))
 
     async def test_asset_too_large_falls_back_to_link(self) -> None:
         release = _release(size=2 * 1024 * 1024)

@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from astrbot_plugin_github_notify.core import formatter  # noqa: E402
 from astrbot_plugin_github_notify.core.assets import (  # noqa: E402
     format_size,
+    max_bytes,
     select_assets,
 )
 from astrbot_plugin_github_notify.core.events import (  # noqa: E402
@@ -314,6 +315,30 @@ class TestAssets(unittest.TestCase):
         assets = [Asset("1", "source.tar.gz", 10, "", "")]
         self.assertEqual(select_assets(assets, settings), [])
 
+    def test_skip_assets_over_size_limit(self) -> None:
+        settings = self._settings(asset_max_mb=50)
+        limit = max_bytes(settings)
+        assets = [
+            Asset("1", "app-universal.apk", 60 * 1024 * 1024, "", ""),
+            Asset("2", "app-v8a.apk", 47 * 1024 * 1024, "", ""),
+            Asset("3", "app-v7a.apk", 44 * 1024 * 1024, "", ""),
+        ]
+        picked = select_assets(assets, settings, limit)
+        self.assertEqual([a.name for a in picked], ["app-v8a.apk"])
+
+    def test_builtin_abi_alias_v8a(self) -> None:
+        settings = self._settings(
+            asset_prefer_keywords=["arm64"],
+            asset_avoid_keywords=["armv7"],
+            asset_max_count=0,
+        )
+        assets = [
+            Asset("1", "app-v7a.apk", 10, "", ""),
+            Asset("2", "app-universal.apk", 10, "", ""),
+            Asset("3", "app-v8a.apk", 10, "", ""),
+        ]
+        self.assertEqual(select_assets(assets, settings)[0].name, "app-v8a.apk")
+
     def test_format_size(self) -> None:
         self.assertEqual(format_size(0), "未知大小")
         self.assertEqual(format_size(1024), "1 KB")
@@ -360,6 +385,28 @@ class TestFormatter(unittest.TestCase):
         )
         self.assertIn("未能发送", text)
         self.assertIn("https://github.com/a", text)
+
+
+class TestReleaseNotes(unittest.TestCase):
+    def test_notes_keep_structure(self) -> None:
+        from astrbot_plugin_github_notify.core.summarizer import fallback_summary
+
+        release = ReleaseInfo(
+            repo="owner/repo",
+            tag="v1",
+            name="v1",
+            body="## 新功能\n\n- **公告入口**\n- 重复番剧清理\n\n---\n*自动构建*",
+            url="",
+            assets=(),
+            prerelease=False,
+            published_at="",
+        )
+        text = fallback_summary(release, (), 1000)
+        self.assertIn("新功能", text)
+        self.assertIn("- 公告入口", text)
+        self.assertIn("- 重复番剧清理", text)
+        self.assertNotIn("**", text)
+        self.assertNotIn("---", text)
 
 
 class TestState(unittest.TestCase):

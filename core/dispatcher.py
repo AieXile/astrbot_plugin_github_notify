@@ -12,11 +12,14 @@ def _text_chain(text: str) -> Any:
     return MessageChain().message(text)
 
 
-def _file_chain(path: Path, name: str) -> Any:
+def _file_chain(path: Path | None, name: str, url: str = "") -> Any:
     from astrbot.api.event import MessageChain
     from astrbot.api.message_components import File
 
-    return MessageChain(chain=[File(name=name, file=str(path))])
+    # 优先让协议端直接下载 URL：docker 部署下协议端通常读不到
+    # AstrBot 容器内的本地路径，传本地路径会发送失败。
+    source = url or (str(path) if path else "")
+    return MessageChain(chain=[File(name=name, file=source)])
 
 
 async def send_text(
@@ -35,12 +38,15 @@ async def send_text(
 async def send_file(
     context: Any,
     umo: str,
-    path: Path,
+    path: Path | None,
     name: str,
     logger: Any,
+    url: str = "",
 ) -> bool:
     try:
-        return bool(await context.send_message(umo, _file_chain(path, name)))
+        return bool(
+            await context.send_message(umo, _file_chain(path, name, url))
+        )
     except Exception:
         logger.exception("GitHub 通知发送文件失败：%s", umo)
         return False
@@ -63,12 +69,13 @@ async def send_to_targets(
 async def send_file_to_targets(
     context: Any,
     targets: Iterable[str],
-    path: Path,
+    path: Path | None,
     name: str,
     logger: Any,
+    url: str = "",
 ) -> list[str]:
     succeeded: list[str] = []
     for umo in targets:
-        if await send_file(context, umo, path, name, logger):
+        if await send_file(context, umo, path, name, logger, url):
             succeeded.append(umo)
     return succeeded

@@ -14,6 +14,16 @@ def _matches(name: str, patterns: tuple[str, ...]) -> bool:
     return any(fnmatch.fnmatchcase(lowered, p.lower()) for p in patterns)
 
 
+# 常见 ABI 缩写不一定出现在用户配置的关键字里（如 v8a / v7a），
+# 这里内置识别，避免 universal 包或 32 位包被误选。
+_BUILTIN_64BIT = ("arm64", "aarch64", "x86_64", "x64", "win64", "amd64", "v8a")
+_BUILTIN_32BIT = ("armeabi", "armv7", "v7a", "win32", "i386", "x86")
+
+
+def _contains(name: str, keywords: tuple[str, ...]) -> bool:
+    return any(kw.lower() in name for kw in keywords)
+
+
 def _score(asset: Asset, settings: AssetSettings) -> int:
     name = asset.name.lower()
     score = 0
@@ -25,9 +35,13 @@ def _score(asset: Asset, settings: AssetSettings) -> int:
             break
 
     if settings.prefer_64bit:
-        if any(kw.lower() in name for kw in settings.prefer_keywords):
+        if _contains(name, settings.prefer_keywords) or _contains(
+            name, _BUILTIN_64BIT
+        ):
             score += 20
-        elif any(kw.lower() in name for kw in settings.avoid_keywords):
+        elif _contains(name, settings.avoid_keywords) or _contains(
+            name, _BUILTIN_32BIT
+        ):
             score -= 20
 
     return score
@@ -36,12 +50,24 @@ def _score(asset: Asset, settings: AssetSettings) -> int:
 def select_assets(
     assets: Iterable[Asset],
     settings: AssetSettings,
+    limit_bytes: int = 0,
 ) -> list[Asset]:
-    """按匹配规则和 64 位优先策略挑选附件。"""
+    """按匹配规则和 64 位优先策略挑选附件。
+
+    limit_bytes > 0 时先剔除超出大小上限的附件，避免高优先级的大包
+    （例如 universal 包）挤掉同版本中可发送的附件。
+    """
     candidates = list(assets)
     matched = [a for a in candidates if _matches(a.name, settings.patterns)]
     if not matched and settings.fallback_all:
         matched = candidates
+
+    if limit_bytes > 0:
+        fitting = [
+            a for a in matched if not a.size or a.size <= limit_bytes
+        ]
+        if fitting:
+            matched = fitting
 
     matched.sort(key=lambda item: (-_score(item, settings), item.name.lower()))
     if settings.max_count > 0:

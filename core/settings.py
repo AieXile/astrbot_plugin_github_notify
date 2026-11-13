@@ -119,6 +119,8 @@ class Settings:
     push_max_commits: int = 5
     include_prerelease: bool = True
     notify_on_first_run: bool = False
+    release_use_summary: bool = False
+    release_body_chars: int = 3000
     summary_provider: str = ""
     summary_max_chars: int = 100
     summary_instruction: str = DEFAULT_INSTRUCTION
@@ -136,8 +138,9 @@ class Settings:
                 "x64",
                 "win64",
                 "amd64",
+                "v8a",
             ),
-            avoid_keywords=("armeabi-v7a", "armv7", "x86", "win32", "i386"),
+            avoid_keywords=("armeabi-v7a", "armv7", "v7a", "x86", "win32", "i386"),
             max_count=1,
             max_mb=50,
             fallback_all=False,
@@ -161,9 +164,10 @@ class Settings:
                 "x64",
                 "win64",
                 "amd64",
+                "v8a",
             ),
             avoid_keywords=_as_list(config.get("asset_avoid_keywords"))
-            or ("armeabi-v7a", "armv7", "x86", "win32", "i386"),
+            or ("armeabi-v7a", "armv7", "v7a", "x86", "win32", "i386"),
             max_count=_as_int(config.get("asset_max_count"), 1, 0, 10),
             max_mb=_as_int(config.get("asset_max_mb"), 50, 1, 500),
             fallback_all=_as_bool(config.get("asset_fallback_all"), False),
@@ -192,6 +196,12 @@ class Settings:
             ),
             notify_on_first_run=_as_bool(
                 config.get("notify_on_first_run"), False
+            ),
+            release_use_summary=_as_bool(
+                config.get("release_use_summary"), False
+            ),
+            release_body_chars=_as_int(
+                config.get("release_body_chars"), 3000, 0, 5000
             ),
             summary_provider=_as_text(config.get("summary_provider")),
             summary_max_chars=_as_int(

@@ -3,8 +3,8 @@
 轮询 GitHub 仓库，把 **Issue / Release / Push** 推送到指定 QQ 群或 QQ 号。无公网、不需要 GitHub Actions 或 Webhook，装上插件配好 Token 就能用。
 
 - 每个仓库可以配置**不同的群号 / QQ 号 / UMO 会话**
-- Release 自动用 LLM 总结更新日志（字数、提示词、provider 均可配置）
-- Release 自动发送附件，优先 `*.apk` / `*.exe`，优先 64 位 / `arm64-v8a`
+- Release 默认直接展示发布说明原文（保留标题与列表），可选 LLM 摘要
+- Release 自动发送附件，优先 `*.apk` / `*.exe`，优先 64 位 / `v8a`，自动跳过超出大小上限的包
 - 事件去重、首次运行基线、ETag 缓存、限流退避
 - 不打印 GitHub token
 
@@ -39,6 +39,8 @@ AstrBot/data/plugins/astrbot_plugin_github_notify/
 | `push_max_commits` | `5` | Push 最多展示几条提交 |
 | `include_prerelease` | `true` | 是否通知预发布 Release |
 | `notify_on_first_run` | `false` | 首次运行是否补发当前事件；默认只建立基线，避免刷屏 |
+| `release_use_summary` | `false` | 是否用 LLM 总结更新日志；关闭时直接发送发布说明原文 |
+| `release_body_chars` | `3000` | 发布说明原文字数上限，0 为不限制 |
 | `summary_provider` | 空 | 摘要使用的 LLM，空则用 AstrBot 默认模型 |
 | `summary_max_chars` | `100` | Release 摘要默认字数 |
 | `summary_instruction` | 内置 | 摘要提示词，支持 `{max_chars}` |
@@ -46,8 +48,8 @@ AstrBot/data/plugins/astrbot_plugin_github_notify/
 | `send_assets` | `true` | 是否发送 Release 附件 |
 | `asset_patterns` | `*.apk`, `*.exe` | 默认附件匹配，靠前的规则优先 |
 | `asset_prefer_64bit` | `true` | 优先 64 位 / v8a |
-| `asset_prefer_keywords` | arm64-v8a 等 | 64 位优先关键字 |
-| `asset_avoid_keywords` | armeabi-v7a 等 | 32 位降权关键字 |
+| `asset_prefer_keywords` | arm64-v8a、v8a 等 | 64 位优先关键字 |
+| `asset_avoid_keywords` | armeabi-v7a、v7a 等 | 32 位降权关键字 |
 | `asset_max_count` | `1` | 每个 Release 最多发几个附件，0 表示全部 |
 | `asset_max_mb` | `50` | 单附件大小上限，超过改发下载链接 |
 | `asset_fallback_all` | `false` | 没有匹配附件时是否发送全部 |
@@ -117,10 +119,12 @@ https://github.com/AieXile/AnimeTrack/releases/tag/v2.1.0
 ## 附件选择规则
 
 1. 先按 `asset_patterns` 过滤，规则越靠前优先级越高（默认 APK 优先于 EXE）；
-2. 开启 `asset_prefer_64bit` 时，文件名包含 `arm64-v8a`、`arm64`、`x86_64`、`x64`、`win64`、`amd64` 等关键字加分；
-3. 包含 `armeabi-v7a`、`armv7`、`x86`、`win32`、`i386` 等关键字降权；
-4. 按 `asset_max_count` 截取；
-5. 超过 `asset_max_mb` 或发送失败时，改为发送下载链接。
+2. 先剔除超过 `asset_max_mb` 的附件，避免 universal 大包挤掉同版本中可发送的包；
+3. 开启 `asset_prefer_64bit` 时，文件名包含 `arm64-v8a`、`arm64`、`x86_64`、`x64`、`win64`、`amd64`、`v8a` 等关键字加分；
+4. 包含 `armeabi-v7a`、`armv7`、`v7a`、`x86`、`win32`、`i386` 等关键字降权；
+5. 按 `asset_max_count` 截取；
+6. 发送时优先把 `browser_download_url` 交给协议端直接下载，避免 docker 部署下协议端读不到 AstrBot 容器内的本地文件；URL 发送失败才回退为本地下载；
+7. 全部附件都超过大小上限或发送失败时，改为发送下载链接。
 
 QQ 群文件上传能力取决于协议端和机器人权限；失败会自动回退为链接。
 
@@ -136,7 +140,8 @@ QQ 群文件上传能力取决于协议端和机器人权限；失败会自动�
 | 提示 HTTP 403 | 触发速率限制；填 token、加大 `poll_interval`，插件会按重置时间退避 |
 | 提示 HTTP 404 | 仓库名写错，或私有仓库没填 token |
 | Push 没有提交明细 | Events API 本身不带 commits，插件会用 compare API 补齐；compare 失败时只发链接 |
-| Release 没有附件 | 附件名不匹配 `asset_patterns`、超过大小上限，或平台不支持文件 |
+| Release 没有附件 | 附件名不匹配 `asset_patterns`、所有附件都超过大小上限，或平台不支持文件 |
+| Release 只发了摘要 | 打开 `release_use_summary` 才会走 LLM；默认展示发布说明原文 |
 | 摘要没有走 AI | `summary_provider` 为空且 AstrBot 没有默认模型；会自动退化为发布说明截断 |
 | 改了配置没生效 | 重载插件；轮询循环本身每轮会重新读取配置 |
 
@@ -147,7 +152,7 @@ QQ 群文件上传能力取决于协议端和机器人权限；失败会自动�
 - **Push 不使用 GitHub Events API**：插件每轮读取各分支最新 head，发现变化后用 compare API 补齐提交明细，避免 Events API 漏报 Push。
 - 分支列表接口单页最多 100 个分支；`branches` 留空时监听前 100 个分支。
 - Issue / Release 仍使用 Events API，单页最多 100 条；仓库事件特别密集时建议把间隔调到 120 秒。
-- Release 附件会下载到 `data/plugin_data/astrbot_plugin_github_notify/downloads/`，发送后自动清理。
+- Release 附件优先由协议端直接下载 GitHub 地址，失败时才下载到 `data/plugin_data/astrbot_plugin_github_notify/downloads/`，发送后自动清理。
 - 私有仓库与私有 Release 附件必须配置 token。
 - 预发布 Release 可关闭；草稿 Release 不会通知。
 
@@ -159,4 +164,4 @@ python tests/test_github_client.py
 python tests/test_service.py
 ```
 
-覆盖：配置解析、分仓库目标、Issue/Release/Push 解析、分支过滤、预发布过滤、64 位附件优先、附件数量/大小上限、链接回退、ETag 304、403/429 退避、附件下载重定向、事件去重、首次基线、LLM 摘要与失败兜底、消息格式化。
+覆盖：配置解析、分仓库目标、Issue/Release/Push 解析、分支过滤、预发布过滤、64 位附件优先、附件数量/大小上限、超限附件跳过、链接回退、ETag 304、403/429 退避、附件下载重定向、事件去重、首次基线、发布说明原文与 LLM 摘要兜底、消息格式化。

@@ -25,7 +25,7 @@ PLUGIN_NAME = "astrbot_plugin_github_notify"
     PLUGIN_NAME,
     "AieXile",
     "轮询 GitHub 仓库的 Issue / Release / Push 并推送到指定群或 QQ",
-    "v1.0.2",
+    "v1.0.3",
     "",
 )
 class GitHubNotifyPlugin(Star):
